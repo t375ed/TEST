@@ -4,7 +4,7 @@ import urllib.parse
 import json
 
 # 請填入你的 LINE Notify Token
-TOKEN = "填入你的真實TOKEN" 
+TOKEN = "S9r44KFKxG8T+fcql+KHLGZ0fy2/zHEMsNgWY91thDIDQDjKYFhzVp215VjeX8uivL4CqYvYr2lhc8if7nj8jsIqDQTR8fHKel2ulRPxbJUO2iw6+O5NAYFLTiRKLgfh7AWrrV/bPiAWpDSDJ5AHZQdB04t89/1O/w1cDnyilFU=" 
 
 def get_data(stock_id):
     try:
