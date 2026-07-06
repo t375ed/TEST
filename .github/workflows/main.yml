@@ -2,22 +2,29 @@ name: Stock Bot
 
 on:
   schedule:
-    - cron: '0 7 * * *' 
-  workflow_dispatch:
+    - cron: '0 7 * * *' # 每天早上 7 點執行
+  workflow_dispatch:     # 允許你手動在 GitHub 頁面點擊執行
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      # 1. 下載你的程式碼庫
+      - uses: actions/checkout@v4
       
+      # 2. 設定 Python 環境
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.9'
           
+      # 3. 安裝必要的計算套件 (pandas 與 numpy 是計算技術指標必須的)
       - name: Install dependencies
-        run: pip install requests yfinance pandas numpy
+        run: pip install yfinance pandas numpy
         
+      # 4. 執行爬蟲，並將 GitHub Secrets 的資料傳給 Python
       - name: Run crawler
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: python web_crawler.py
