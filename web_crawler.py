@@ -1,96 +1,49 @@
 import yfinance as yf
 import urllib.request
 import json
-import os
-import requests
-import pandas as pd
-from datetime import datetime, timezone, timedelta
 
-TOKEN = os.environ.get('LINE_TOKEN')
-USER_ID = "U601a272f959493a2714777ec87256977"
+# 請直接將你的 Token 填入這裡，確保發送成功
+TOKEN = "S9r44KFKxG8T+fcql+KHLGZ0fy2/zHEMsNgWY91thDIDQDjKYFhzVp215VjeX8uivL4CqYvYr2lhc8if7nj8jsIqDQTR8fHKel2ulRPxbJUO2iw6+O5NAYFLTiRKLgfh7AWrrV/bPiAWpDSDJ5AHZQdB04t89/1O/w1cDnyilFU=" 
 
-# 抓取證交所官方每日基本面資料 (本益比、殖利率、股價淨值比)
-def get_twse_fundamentals():
+def get_data(stock_id):
     try:
-        url = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_d"
-        res = requests.get(url)
-        data = res.json()
-        fund_dict = {}
-        for item in data:
-            fund_dict[item['Code']] = {
-                'pe': item['PEratio'],
-                'pb': item['PBratio'],
-                'yield': item['DividendYield']
-            }
-        return fund_dict
-    except Exception:
-        return {}
-
-twse_data = get_twse_fundamentals()
-
-def get_full_data(stock_id):
-    try:
-        # 抓取技術面歷史股價
         ticker = yf.Ticker(f"{stock_id}.TW")
-        hist = ticker.history(period="120d") 
+        info = ticker.info
+        hist = ticker.history(period="60d")
         
-        if hist.empty:
-            return "❌ 抓取失敗：無歷史資料"
+        # 1. 基本面數據 (直接從 info 讀取，如果 info 有資料就會顯示)
+        price = info.get('currentPrice', 'N/A')
+        eps = info.get('trailingEps', 'N/A')
+        pe = info.get('trailingPE', 'N/A')
+        div_yield = info.get('dividendYield', 0)
+        if div_yield: div_yield = f"{div_yield*100:.2f}%"
+        else: div_yield = "N/A"
 
+        # 2. 技術指標計算
         close = hist['Close']
-        price = close.iloc[-1]
-        
-        # --- 基本面計算 ---
-        pe = twse_data.get(stock_id, {}).get('pe', 'N/A')
-        pb = twse_data.get(stock_id, {}).get('pb', 'N/A')
-        dy = twse_data.get(stock_id, {}).get('yield', 'N/A')
-        
-        # 透過 股價/本益比 反推 EPS
-        try:
-            if pe != 'N/A' and float(pe) > 0:
-                eps = f"{price / float(pe):.2f}"
-            else:
-                eps = "N/A"
-        except:
-            eps = "N/A"
-
-        # --- 技術面計算 ---
         ma20 = close.rolling(20).mean().iloc[-1]
         std20 = close.rolling(20).std().iloc[-1]
-        
-        ema12 = close.ewm(span=12, adjust=False).mean()
-        ema26 = close.ewm(span=26, adjust=False).mean()
-        macd = (ema12 - ema26).iloc[-1]
-        
-        delta = close.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        rsi = (100 - (100 / (1 + rs))).iloc[-1]
-        
-        # 組合報告
-        report = (f"💰價:{price:.0f} | EPS:{eps} | PE:{pe}\n"
-                  f"淨值比:{pb} | 殖利率:{dy}%\n"
-                  f"布林:{ma20-2*std20:.0f}~{ma20+2*std20:.0f}\n"
-                  f"MACD:{macd:.2f} | RSI:{rsi:.1f}")
-        return report
-        
+        upper = ma20 + (2 * std20)
+        lower = ma20 - (2 * std20)
+
+        return (f"💰現價:{price} | EPS:{eps} | PE:{pe}\n"
+                f"殖利率:{div_yield}\n"
+                f"布林:上{upper:.0f} 中{ma20:.0f} 下{lower:.0f}")
     except Exception as e:
-        return f"⚠️ 錯誤: {str(e)}"
+        return f"資料抓取異常: {str(e)}"
 
 def main():
-    stocks = {'2330': '台積電', '2454': '聯發科', '2395': '研華', '2327': '國巨'}
-    report = ["📊 完整基本面與波段報告"]
+    stocks = {'2330': '台積電', '2454': '聯發科'}
+    report = ["📊 完整數據報告"]
     
     for sid, sname in stocks.items():
-        d = get_full_data(sid)
-        report.append(f"\n【{sname}】\n{d}")
+        data = get_data(sid)
+        report.append(f"\n【{sname}】\n{data}")
     
-    # 發送 LINE 訊息
-    payload = {"to": USER_ID, "messages": [{"type": "text", "text": "\n".join(report)}]}
-    headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {TOKEN}'}
-    req = urllib.request.Request("https://api.line.me/v2/bot/message/push", 
-                                 data=json.dumps(payload).encode('utf-8'), headers=headers)
+    payload = {"message": "\n".join(report)}
+    headers = {'Authorization': f'Bearer {TOKEN}', 'Content-Type': 'application/x-www-form-urlencoded'}
+    req = urllib.request.Request("https://notify-api.line.me/api/notify", 
+                                 data=urllib.parse.urlencode(payload).encode('utf-8'), headers=headers)
     urllib.request.urlopen(req)
 
 if __name__ == "__main__":
