@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 import urllib.request
 import json
 
-# 設定區 (保持 Token 不變)
+# 設定區
 TOKEN = "S9r44KFKxG8T+fcql+KHLGZ0fy2/zHEMsNgWY91thDIDQDjKYFhzVp215VjeX8uivL4CqYvYr2lhc8if7nj8jsIqDQTR8fHKel2ulRPxbJUO2iw6+O5NAYFLTiRKLgfh7AWrrV/bPiAWpDSDJ5AHZQdB04t89/1O/w1cDnyilFU="
 USER_ID = "U601a272f959493a2714777ec87256977"
 
@@ -17,7 +17,7 @@ def get_stock_data(stock_id):
         hist = ticker.history(period="120d")
         info = ticker.info
         
-        # 1. 抓取基礎數據
+        # 1. 抓取基礎與財報數據
         price = info.get('currentPrice', 'N/A')
         eps = info.get('trailingEps', 'N/A')
         pe = info.get('trailingPE', 'N/A')
@@ -31,19 +31,27 @@ def get_stock_data(stock_id):
         close = hist['Close']
         ma20 = close.rolling(20).mean().iloc[-1]
         std20 = close.rolling(20).std().iloc[-1]
+        
+        # 布林通道三數值
+        b_mid = ma20
+        b_top = ma20 + (2 * std20)
+        b_bot = ma20 - (2 * std20)
+        
+        # MACD
         ema12 = close.ewm(span=12, adjust=False).mean().iloc[-1]
         ema26 = close.ewm(span=26, adjust=False).mean().iloc[-1]
         macd = ema12 - ema26
         
+        # RSI
         delta = close.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean().iloc[-1]
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean().iloc[-1]
         rsi = 100 - (100 / (1 + (gain / loss)))
         
-        # 3. 排版
+        # 3. 三大區塊排版
         return (f"💰現價:{price}\n"
                 f"【獲利】毛利:{g_m*100:.1f}%|營益:{o_m*100:.1f}%|稅後:{n_m*100:.1f}%\n"
-                f"【技術】布林:{ma20-2*std20:.0f}~{ma20+2*std20:.0f}|MACD:{macd:.2f}|RSI:{rsi:.1f}\n"
+                f"【技術】布林底:{b_bot:.0f}|頂:{b_top:.0f}|均:{b_mid:.0f}|MACD:{macd:.2f}|RSI:{rsi:.1f}\n"
                 f"【估值】EPS:{eps}|P/E:{pe}|P/B:{pb}|ROE:{roe*100:.1f}%")
                 
     except Exception as e:
