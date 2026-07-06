@@ -10,13 +10,17 @@ USER_ID = "U601a272f959493a2714777ec87256977"
 
 def get_stable_data(stock_id):
     try:
+        # 關鍵修正：必須是全大寫的 .TW
         ticker = yf.Ticker(f"{stock_id}.TW")
-        hist = ticker.history(period="120d") # 抓久一點確保技術指標穩定
+        hist = ticker.history(period="120d") 
         
+        if hist.empty:
+            return "❌ 抓取失敗：Yahoo 無歷史資料"
+
         # 1. 股價
         price = hist['Close'].iloc[-1]
         
-        # 2. 技術指標 (改用 pandas 計算，不依賴 info)
+        # 2. 技術指標
         close = hist['Close']
         ma20 = close.rolling(20).mean().iloc[-1]
         std20 = close.rolling(20).std().iloc[-1]
@@ -33,23 +37,20 @@ def get_stable_data(stock_id):
         rs = gain / loss
         rsi = (100 - (100 / (1 + rs))).iloc[-1]
         
-        return {
-            "p": f"{price:.2f}",
-            "bb": f"{ma20-2*std20:.1f}~{ma20+2*std20:.1f}",
-            "macd": f"{macd:.2f}",
-            "rsi": f"{rsi:.1f}"
-        }
+        return f"💰價:{price:.2f}\n布林:{ma20-2*std20:.1f}~{ma20+2*std20:.1f}\nMACD:{macd:.2f} | RSI:{rsi:.1f}"
+        
     except Exception as e:
-        return None
+        # 關鍵修正：將錯誤直接傳到 LINE，不要回傳 None
+        return f"⚠️ 計算錯誤: {str(e)}"
 
 def main():
     stocks = {'2330': '台積電', '2454': '聯發科', '2395': '研華', '2327': '國巨'}
-    report = ["📊 台股技術面報告"]
+    report = ["📊 台股技術面報告 (除錯版)"]
     
     for sid, sname in stocks.items():
         d = get_stable_data(sid)
-        if d:
-            report.append(f"\n【{sname}】\n💰價:{d['p']}\n布林:{d['bb']}\nMACD:{d['macd']} | RSI:{d['rsi']}")
+        # 直接印出結果，不管成功或失敗都會顯示
+        report.append(f"\n【{sname}】\n{d}")
     
     # 發送
     payload = {"to": USER_ID, "messages": [{"type": "text", "text": "\n".join(report)}]}
