@@ -1,46 +1,40 @@
 import yfinance as yf
-import requests
-import json
-import time
+import pandas as pd
 
-TOKEN = "S9r44KFKxG8T+fcql+KHLGZ0fy2/zHEMsNgWY91thDIDQDjKYFhzVp215VjeX8uivL4CqYvYr2lhc8if7nj8jsIqDQTR8fHKel2ulRPxbJUO2iw6+O5NAYFLTiRKLgfh7AWrrV/bPiAWpDSDJ5AHZQdB04t89/1O/w1cDnyilFU=" # 記得換成你的 Token
+# 直接計算核心數據，不依賴會出錯的 info API，也不透過網路發送
+def get_full_analysis(stock_id):
+    ticker = yf.Ticker(f"{stock_id}.TW")
+    hist = ticker.history(period="120d")
+    
+    if hist.empty:
+        return "無歷史資料"
 
-def get_data(stock_id):
-    try:
-        ticker = yf.Ticker(f"{stock_id}.TW")
-        hist = ticker.history(period="120d")
-        if hist.empty: return "無歷史資料"
+    close = hist['Close']
+    price = close.iloc[-1]
+    
+    # 技術指標計算
+    ma20 = close.rolling(20).mean().iloc[-1]
+    std20 = close.rolling(20).std().iloc[-1]
+    ema12 = close.ewm(span=12, adjust=False).mean().iloc[-1]
+    ema26 = close.ewm(span=26, adjust=False).mean().iloc[-1]
+    macd = ema12 - ema26
+    rsi_delta = close.diff()
+    gain = (rsi_delta.where(rsi_delta > 0, 0)).rolling(window=14).mean().iloc[-1]
+    loss = (-rsi_delta.where(rsi_delta < 0, 0)).rolling(window=14).mean().iloc[-1]
+    rsi = 100 - (100 / (1 + (gain / loss)))
 
-        close = hist['Close']
-        price = close.iloc[-1]
-        ma20 = close.rolling(20).mean().iloc[-1]
-        std20 = close.rolling(20).std().iloc[-1]
-        
-        return (f"💰現價:{price:.0f}\n布林:{ma20-2*std20:.0f}~{ma20+2*std20:.0f}")
-    except Exception as e:
-        return f"錯誤: {str(e)}"
+    # 顯示結果
+    print(f"--- {stock_id} 完整分析 ---")
+    print(f"當前市價: {price:.2f} 元")
+    print(f"布林通道: 中軌 {ma20:.2f} | 上軌 {ma20+2*std20:.2f} | 下軌 {ma20-2*std20:.2f}")
+    print(f"MACD指標: {macd:.3f}")
+    print(f"RSI14指標: {rsi:.2f}")
+    print("--------------------------")
 
 def main():
-    stocks = {'2330': '台積電', '2454': '聯發科'}
-    report = ["📊 技術分析報告"]
-    for sid, sname in stocks.items():
-        report.append(f"\n【{sname}】\n{get_data(sid)}")
-    
-    # 使用 requests 發送，比 urllib 更穩定
-    url = "https://notify-api.line.me/api/notify"
-    headers = {'Authorization': f'Bearer {TOKEN}'}
-    data = {'message': "\n".join(report)}
-    
-    # 強制重試機制
-    for i in range(3):
-        try:
-            res = requests.post(url, headers=headers, data=data, timeout=15)
-            if res.status_code == 200:
-                print("發送成功")
-                break
-        except Exception:
-            if i == 2: raise
-            time.sleep(5)
+    stocks = ['2330', '2454', '2395', '2327']
+    for sid in stocks:
+        get_full_analysis(sid)
 
 if __name__ == "__main__":
     main()
