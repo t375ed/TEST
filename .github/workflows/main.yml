@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.9'
       - name: Install dependencies
-        run: pip install requests yfinance
+        run: pip install yfinance pandas
       - name: Run crawler
         run: python web_crawler.py
         env:
