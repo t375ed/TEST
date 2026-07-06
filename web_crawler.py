@@ -1,54 +1,32 @@
-import yfinance as yf
-from datetime import datetime, timezone, timedelta
-import urllib.request
-import json
-
-# 設定區 (保持你的 Token 不變)
-TOKEN = "S9r44KFKxG8T+fcql+KHLGZ0fy2/zHEMsNgWY91thDIDQDjKYFhzVp215VjeX8uivL4CqYvYr2lhc8if7nj8jsIqDQTR8fHKel2ulRPxbJUO2iw6+O5NAYFLTiRKLgfh7AWrrV/bPiAWpDSDJ5AHZQdB04t89/1O/w1cDnyilFU="
-USER_ID = "U601a272f959493a2714777ec87256977"
-
 def get_stock_data(stock_id):
-    """
-    功能：使用 yfinance 抓取股價、EPS 與財務指標
-    """
     try:
         ticker = yf.Ticker(f"{stock_id}.TW")
         info = ticker.info
+        hist = ticker.history(period="120d")
         
-        # 抓取數據，若抓不到則顯示 N/A
+        # 抓取數據 (若失敗則顯示 N/A 或 0)
         price = info.get('currentPrice', 'N/A')
-        eps = info.get('trailingEps', 'N/A')       # EPS
-        pe = info.get('trailingPE', 'N/A')         # 本益比
-        div_yield = info.get('dividendYield', 0)   # 殖利率
+        eps = info.get('trailingEps', 'N/A')
+        pe = info.get('trailingPE', 'N/A')
+        pb = info.get('priceToBook', 'N/A')
+        roe = info.get('returnOnEquity', 0)
+        gross_margin = info.get('grossMargins', 0)
+        op_margin = info.get('operatingMargins', 0)
+        net_margin = info.get('profitMargins', 0)
         
-        # 格式化殖利率
-        div_str = f"{div_yield*100:.2f}%" if div_yield else "N/A"
+        # 技術指標計算 (布林/MACD)
+        close = hist['Close']
+        ma20 = close.rolling(20).mean().iloc[-1]
+        std20 = close.rolling(20).std().iloc[-1]
+        ema12 = close.ewm(span=12, adjust=False).mean().iloc[-1]
+        ema26 = close.ewm(span=26, adjust=False).mean().iloc[-1]
+        macd = ema12 - ema26
         
-        return f"💰價:{price} | EPS:{eps}\nPE:{pe} | 殖利率:{div_str}"
+        # 整理報告 (三大區塊)
+        return (f"💰現價:{price}\n"
+                f"【獲利】毛利:{gross_margin*100:.1f}%|營益:{op_margin*100:.1f}%|稅後:{net_margin*100:.1f}%\n"
+                f"【技術】布林:{ma20-2*std20:.0f}~{ma20+2*std20:.0f}|MACD:{macd:.2f}\n"
+                f"【估值】EPS:{eps}|P/E:{pe}|P/B:{pb}|ROE:{roe*100:.1f}%")
+                
     except Exception as e:
-        print(f"DEBUG: 抓取 {stock_id} 失敗: {e}")
-        return "資料抓取異常"
-
-def main():
-    now = datetime.now(timezone(timedelta(hours=8)))
-    report = [f"📊 股市收盤報告 ({now.strftime('%m/%d %H:%M')})", "-"*15]
-    
-    stocks = {'2330': '台積電', '2454': '聯發科', '2395': '研華', '2327': '國巨'}
-    
-    for sid, sname in stocks.items():
-        data = get_stock_data(sid)
-        report.append(f"【{sname}】\n{data}\n")
-    
-    report_text = "\n".join(report)
-    
-    # 發送至 LINE
-    payload = {"to": USER_ID, "messages": [{"type": "text", "text": report_text}]}
-    headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {TOKEN}'}
-    
-    req = urllib.request.Request("https://api.line.me/v2/bot/message/push", 
-                                 data=json.dumps(payload).encode('utf-8'), headers=headers)
-    with urllib.request.urlopen(req) as response:
-        print("✅ 成功！")
-
-if __name__ == "__main__":
-    main()
+        return f"資料抓取異常: {str(e)}"
