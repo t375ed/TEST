@@ -1,30 +1,32 @@
-name: Stock Bot
+name: Stock Bot # 這是這個自動化流程的名稱，會顯示在 GitHub Actions 頁面上
 
 on:
   schedule:
-    - cron: '0 7 * * *' # 每天早上 7 點執行
-  workflow_dispatch:     # 允許你手動在 GitHub 頁面點擊執行
+    - cron: '0 7 * * *' # 自動排程：每天台灣時間早上 7 點（UTC 23:00）自動執行一次
+  workflow_dispatch:     # 啟用手動開關：讓你可以在 GitHub 頁面上按下「Run workflow」按鈕立即執行
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # 使用 GitHub 提供的最新版 Ubuntu 伺服器來跑你的程式
     steps:
-      # 1. 下載你的程式碼庫
+      # 1. 把你的程式碼從 GitHub 倉庫下載到這台伺服器上
       - uses: actions/checkout@v4
       
-      # 2. 設定 Python 環境
+      # 2. 設定 Python 環境，我們選擇使用 3.9 版本
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
           
-      # 3. 安裝必要的計算套件 (pandas 與 numpy 是計算技術指標必須的)
+      # 3. 安裝執行 Python 程式所需的套件
+      # yfinance 用來抓股價，pandas/numpy 用來計算技術指標
       - name: Install dependencies
         run: pip install yfinance pandas numpy
         
-      # 4. 執行爬蟲，並將 GitHub Secrets 的資料傳給 Python
+      # 4. 執行你的程式，並把 GitHub 設定的秘密變數傳給它
       - name: Run crawler
         env:
+          # 將 GitHub Secrets 裡的資料塞進去當作環境變數，這樣程式裡就能讀到，且不需要寫在代碼裡
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-        run: python web_crawler.py
+        run: python web_crawler.py # 告訴伺服器：請執行 web_crawler.py 這支程式
