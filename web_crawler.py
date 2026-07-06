@@ -3,22 +3,23 @@ import pandas as pd
 from datetime import datetime, timezone, timedelta
 import urllib.request
 import json
+import os  # 用於讀取 GitHub Secrets 的環境變數
 
-# 設定區
-TOKEN = "S9r44KFKxG8T+fcql+KHLGZ0fy2/zHEMsNgWY91thDIDQDjKYFhzVp215VjeX8uivL4CqYvYr2lhc8if7nj8jsIqDQTR8fHKel2ulRPxbJUO2iw6+O5NAYFLTiRKLgfh7AWrrV/bPiAWpDSDJ5AHZQdB04t89/1O/w1cDnyilFU="
-USER_ID = "U601a272f959493a2714777ec87256977"
+# 從系統環境變數中讀取，這樣程式碼內就不會出現你的隱私資訊
+TOKEN = os.environ.get("LINE_TOKEN")
+USER_ID = os.environ.get("LINE_USER_ID")
 
 def get_stock_data(stock_id):
     """
-    抓取股價、財報與技術指標，並按區塊排版
+    功能：抓取股價、財報與技術指標，並按區塊排版
     """
     try:
+        # 建立股票物件並抓取資料，使用 ffill() 填補斷層避免 NaN
         ticker = yf.Ticker(f"{stock_id}.TW")
-        # 獲取 120 天數據，ffill() 確保中間的斷層被補齊，解決 NaN 問題
         hist = ticker.history(period="120d").ffill()
         info = ticker.info
         
-        # 1. 抓取基礎數據 (若為空則給予 0 或 N/A)
+        # 基礎財報數據，若無資料則給予 0 或 N/A
         price = info.get('currentPrice', 'N/A')
         eps = info.get('trailingEps', 'N/A')
         pe = info.get('trailingPE', 'N/A')
@@ -28,28 +29,28 @@ def get_stock_data(stock_id):
         o_m = info.get('operatingMargins', 0) or 0
         n_m = info.get('profitMargins', 0) or 0
         
-        # 2. 計算技術指標
+        # 技術指標計算 (布林通道、MACD、RSI)
         close = hist['Close']
         
-        # 布林通道 (強制計算並處理為數字)
+        # 布林通道：均線、上軌、下軌
         ma20 = close.rolling(20).mean().iloc[-1]
         std20 = close.rolling(20).std().iloc[-1]
         b_mid = float(ma20)
         b_top = float(ma20 + (2 * std20))
         b_bot = float(ma20 - (2 * std20))
         
-        # MACD
+        # MACD：快慢線差值
         ema12 = close.ewm(span=12, adjust=False).mean().iloc[-1]
         ema26 = close.ewm(span=26, adjust=False).mean().iloc[-1]
         macd = float(ema12 - ema26)
         
-        # RSI (使用 fillna(0) 確保不會出現 NaN)
+        # RSI：相對強弱指標
         delta = close.diff()
         gain = delta.clip(lower=0).rolling(window=14).mean().iloc[-1]
         loss = -delta.clip(upper=0).rolling(window=14).mean().iloc[-1]
         rsi = float(100 - (100 / (1 + (gain / loss)))) if loss != 0 else 100
         
-        # 3. 排版回傳 (確保數值顯示，過長則取整)
+        # 排版輸出
         return (f"💰現價:{price}\n"
                 f"【獲利】毛利:{g_m*100:.1f}%|營益:{o_m*100:.1f}%|稅後:{n_m*100:.1f}%\n"
                 f"【技術】布林底:{b_bot:.0f}|頂:{b_top:.0f}|均:{b_mid:.0f}|MACD:{macd:.2f}|RSI:{rsi:.1f}\n"
@@ -59,6 +60,11 @@ def get_stock_data(stock_id):
         return f"資料抓取異常: {e}"
 
 def main():
+    # 檢查 TOKEN 是否正確載入
+    if not TOKEN or not USER_ID:
+        print("❌ 錯誤：找不到 TOKEN 或 USER_ID，請檢查 GitHub Secrets 設定")
+        return
+
     now = datetime.now(timezone(timedelta(hours=8)))
     report = [f"📊 股市收盤報告 ({now.strftime('%m/%d %H:%M')})", "-"*15]
     
@@ -70,7 +76,7 @@ def main():
     
     report_text = "\n".join(report)
     
-    # 使用偽裝瀏覽器請求發送至 LINE
+    # 偽裝瀏覽器請求發送至 LINE
     payload = {"to": USER_ID, "messages": [{"type": "text", "text": report_text}]}
     headers = {
         'Content-Type': 'application/json',
@@ -89,5 +95,4 @@ def main():
         print(f"❌ 發送失敗: {e}")
 
 if __name__ == "__main__":
-    main()
     main()
