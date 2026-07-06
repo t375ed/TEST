@@ -1,11 +1,9 @@
 import yfinance as yf
-import urllib.request
-import urllib.parse
+import requests
 import json
 import time
 
-# 請填入你的真實 LINE Notify Token
-TOKEN = "填入你的真實TOKEN" 
+TOKEN = "S9r44KFKxG8T+fcql+KHLGZ0fy2/zHEMsNgWY91thDIDQDjKYFhzVp215VjeX8uivL4CqYvYr2lhc8if7nj8jsIqDQTR8fHKel2ulRPxbJUO2iw6+O5NAYFLTiRKLgfh7AWrrV/bPiAWpDSDJ5AHZQdB04t89/1O/w1cDnyilFU=" # 記得換成你的 Token
 
 def get_data(stock_id):
     try:
@@ -15,36 +13,33 @@ def get_data(stock_id):
 
         close = hist['Close']
         price = close.iloc[-1]
-        
         ma20 = close.rolling(20).mean().iloc[-1]
         std20 = close.rolling(20).std().iloc[-1]
-        ema12 = close.ewm(span=12, adjust=False).mean().iloc[-1]
-        ema26 = close.ewm(span=26, adjust=False).mean().iloc[-1]
-        macd = ema12 - ema26
         
-        return (f"💰現價:{price:.0f} | MACD:{macd:.2f}\n"
-                f"布林:{ma20-2*std20:.0f}~{ma20+2*std20:.0f}")
+        return (f"💰現價:{price:.0f}\n布林:{ma20-2*std20:.0f}~{ma20+2*std20:.0f}")
     except Exception as e:
-        return f"計算錯誤: {str(e)}"
+        return f"錯誤: {str(e)}"
 
 def main():
     stocks = {'2330': '台積電', '2454': '聯發科'}
-    report = ["📊 實戰技術分析報告"]
+    report = ["📊 技術分析報告"]
     for sid, sname in stocks.items():
         report.append(f"\n【{sname}】\n{get_data(sid)}")
     
-    # 增加重試機制
-    payload = {"message": "\n".join(report)}
-    headers = {'Authorization': f'Bearer {TOKEN}', 'Content-Type': 'application/x-www-form-urlencoded'}
+    # 使用 requests 發送，比 urllib 更穩定
+    url = "https://notify-api.line.me/api/notify"
+    headers = {'Authorization': f'Bearer {TOKEN}'}
+    data = {'message': "\n".join(report)}
     
-    for i in range(3): # 最多嘗試 3 次
+    # 強制重試機制
+    for i in range(3):
         try:
-            req = urllib.request.Request("https://notify-api.line.me/api/notify", 
-                                         data=urllib.parse.urlencode(payload).encode('utf-8'), headers=headers)
-            urllib.request.urlopen(req, timeout=10)
-            break 
-        except Exception as e:
-            if i == 2: raise e
+            res = requests.post(url, headers=headers, data=data, timeout=15)
+            if res.status_code == 200:
+                print("發送成功")
+                break
+        except Exception:
+            if i == 2: raise
             time.sleep(5)
 
 if __name__ == "__main__":
