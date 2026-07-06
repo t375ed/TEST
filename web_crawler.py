@@ -1,65 +1,66 @@
+import yfinance as yf
 import urllib.request
 import json
-import ssl
+import os
 from datetime import datetime, timezone, timedelta
 
-# ========================================================
-# 設定區
-# ========================================================
-TOKEN = "S9r44KFKxG8T+fcql+KHLGZ0fy2/zHEMsNgWY91thDIDQDjKYFhzVp215VjeX8uivL4CqYvYr2lhc8if7nj8jsIqDQTR8fHKel2ulRPxbJUO2iw6+O5NAYFLTiRKLgfh7AWrrV/bPiAWpDSDJ5AHZQdB04t89/1O/w1cDnyilFU="
+# LINE 設定改為從 GitHub Secrets 讀取，更安全
+TOKEN = os.environ.get('LINE_TOKEN')
 USER_ID = "U601a272f959493a2714777ec87256977"
 
-def get_stock_price(stock_id):
-    """
-    功能：透過 Yahoo Finance 抓取股價 (穩定繞過 403 限制)
-    注意：台股代號需加上 '.TW' 後綴
-    """
-    # Yahoo Finance 網址結構
-    symbol = f"{stock_id}.TW"
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d"
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
-    
+def get_stock_data(stock_id):
     try:
-        context = ssl._create_unverified_context()
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, context=context, timeout=10) as response:
-            data = json.loads(response.read().decode())
-            # 解析 JSON 結構中的最新收盤價
-            price = data['chart']['result'][0]['meta']['regularMarketPrice']
-            return str(price)
+        ticker = yf.Ticker(f"{stock_id}.TW")
+        info = ticker.info
+        # 獲取過去 30 天數據計算 20 日布林通道
+        hist = ticker.history(period="30d") 
+        
+        price = info.get('currentPrice') or info.get('regularMarketPrice')
+        eps = info.get('trailingEps')
+        pe = info.get('trailingPE')
+        
+        # 計算布林通道 (MA20 + 2倍標準差)
+        ma20 = hist['Close'].rolling(window=20).mean().iloc[-1]
+        std20 = hist['Close'].rolling(window=20).std().iloc[-1]
+        upper = ma20 + (2 * std20)
+        lower = ma20 - (2 * std20)
+        
+        return {
+            "price": f"{price:.2f}" if price else "N/A",
+            "eps": f"{eps:.2f}" if eps else "N/A",
+            "pe": f"{pe:.2f}" if pe else "N/A",
+            "upper": f"{upper:.2f}",
+            "lower": f"{lower:.2f}"
+        }
     except Exception as e:
-        print(f"DEBUG: 抓取 {symbol} 失敗: {e}")
-    return None
+        print(f"DEBUG: 抓取 {stock_id} 失敗: {e}")
+        return None
 
 def main():
     now = datetime.now(timezone(timedelta(hours=8)))
-    report = [f"📊 股市收盤報告 ({now.strftime('%m/%d %H:%M')})", "-"*15]
+    report = [f"📊 股市收盤報告 ({now.strftime('%m/%d %H:%M')})", "-"*20]
     
-    # 注意：代號後方不需要加 .TW，程式會自動處理
-    stocks = {'0050': '元大台灣50', '2330': '台積電', '2454': '聯發科', '2395': '研華', '2327': '國巨'}
+    stocks = {'0050': '0050', '2330': '台積電', '2454': '聯發科', '2395': '研華', '2327': '國巨'}
     
     for sid, sname in stocks.items():
-        price = get_stock_price(sid)
-        report.append(f"{sname}: {price if price else '目前無報價'}")
+        data = get_stock_data(sid)
+        if data:
+            report.append(f"【{sname}】")
+            report.append(f"💰價:{data['price']} | EPS:{data['eps']} | PE:{data['pe']}")
+            report.append(f"通道:{data['lower']}~{data['upper']}")
+            report.append("-" * 15)
     
     report_text = "\n".join(report)
     
-    # 發送
-    clean_token = TOKEN.strip().encode('ascii', 'ignore').decode('ascii')
+    # 發送至 LINE
     payload = {"to": USER_ID, "messages": [{"type": "text", "text": report_text}]}
-    headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {clean_token}'}
+    headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {TOKEN}'}
     
-    try:
-        req = urllib.request.Request("https://api.line.me/v2/bot/message/push", 
-                                     data=json.dumps(payload).encode('utf-8'), 
-                                     headers=headers)
-        with urllib.request.urlopen(req) as response:
-            print("✅ 成功！已從 Yahoo Finance 抓取並推送。")
-    except Exception as e:
-        print(f"❌ 發送失敗: {e}")
+    req = urllib.request.Request("https://api.line.me/v2/bot/message/push", 
+                                 data=json.dumps(payload).encode('utf-8'), 
+                                 headers=headers)
+    with urllib.request.urlopen(req) as response:
+        print("✅ 推送成功")
 
 if __name__ == "__main__":
     main()
