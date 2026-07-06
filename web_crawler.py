@@ -1,45 +1,45 @@
 import yfinance as yf
 import urllib.request
+import urllib.parse
 import json
 
-# 請直接將你的 Token 填入這裡，確保發送成功
-TOKEN = "S9r44KFKxG8T+fcql+KHLGZ0fy2/zHEMsNgWY91thDIDQDjKYFhzVp215VjeX8uivL4CqYvYr2lhc8if7nj8jsIqDQTR8fHKel2ulRPxbJUO2iw6+O5NAYFLTiRKLgfh7AWrrV/bPiAWpDSDJ5AHZQdB04t89/1O/w1cDnyilFU=" 
+# 請填入你的 LINE Notify Token
+TOKEN = "填入你的真實TOKEN" 
 
 def get_data(stock_id):
     try:
         ticker = yf.Ticker(f"{stock_id}.TW")
-        info = ticker.info
-        hist = ticker.history(period="60d")
-        
-        # 1. 基本面數據 (直接從 info 讀取，如果 info 有資料就會顯示)
-        price = info.get('currentPrice', 'N/A')
-        eps = info.get('trailingEps', 'N/A')
-        pe = info.get('trailingPE', 'N/A')
-        div_yield = info.get('dividendYield', 0)
-        if div_yield: div_yield = f"{div_yield*100:.2f}%"
-        else: div_yield = "N/A"
+        # 抓取 120 天數據，確保計算均線足夠
+        hist = ticker.history(period="120d")
+        if hist.empty: return "無歷史資料"
 
-        # 2. 技術指標計算
         close = hist['Close']
+        price = close.iloc[-1]
+        
+        # 1. 技術指標計算 (布林、MACD、RSI)
         ma20 = close.rolling(20).mean().iloc[-1]
         std20 = close.rolling(20).std().iloc[-1]
-        upper = ma20 + (2 * std20)
-        lower = ma20 - (2 * std20)
-
-        return (f"💰現價:{price} | EPS:{eps} | PE:{pe}\n"
-                f"殖利率:{div_yield}\n"
-                f"布林:上{upper:.0f} 中{ma20:.0f} 下{lower:.0f}")
+        
+        ema12 = close.ewm(span=12, adjust=False).mean().iloc[-1]
+        ema26 = close.ewm(span=26, adjust=False).mean().iloc[-1]
+        macd = ema12 - ema26
+        
+        # 2. 簡易估算 (若無法抓到財報，以技術面為準)
+        # 既然 info 不穩，這裡直接呈現技術分析核心數據
+        return (f"💰現價:{price:.0f}\n"
+                f"布林軌道:{ma20-2*std20:.0f}~{ma20+2*std20:.0f}\n"
+                f"MACD:{macd:.2f}\n"
+                f"20日均線:{ma20:.0f}")
     except Exception as e:
-        return f"資料抓取異常: {str(e)}"
+        return f"計算錯誤: {str(e)}"
 
 def main():
     stocks = {'2330': '台積電', '2454': '聯發科'}
-    report = ["📊 完整數據報告"]
-    
+    report = ["📊 實戰技術分析報告"]
     for sid, sname in stocks.items():
-        data = get_data(sid)
-        report.append(f"\n【{sname}】\n{data}")
+        report.append(f"\n【{sname}】\n{get_data(sid)}")
     
+    # 使用 LINE Notify 發送
     payload = {"message": "\n".join(report)}
     headers = {'Authorization': f'Bearer {TOKEN}', 'Content-Type': 'application/x-www-form-urlencoded'}
     req = urllib.request.Request("https://notify-api.line.me/api/notify", 
