@@ -10,12 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+          
       - name: Install dependencies
-        run: pip install yfinance pandas
+        run: pip install requests yfinance pandas numpy
+        
       - name: Run crawler
         run: python web_crawler.py
         env:
