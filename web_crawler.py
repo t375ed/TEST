@@ -8,24 +8,15 @@ from datetime import datetime, timezone, timedelta
 TOKEN = os.environ.get('LINE_TOKEN')
 USER_ID = "U601a272f959493a2714777ec87256977"
 
-def get_full_data(stock_id):
+def get_stable_data(stock_id):
     try:
         ticker = yf.Ticker(f"{stock_id}.TW")
-        # 獲取基本資訊
-        info = ticker.info
-        hist = ticker.history(period="60d")
+        hist = ticker.history(period="120d") # 抓久一點確保技術指標穩定
         
-        # 抓取資料，若為空值則設為 0
-        price = info.get('currentPrice') or info.get('regularMarketPrice', 0)
-        eps = info.get('trailingEps', 0)
-        pe = info.get('trailingPE', 0)
+        # 1. 股價
+        price = hist['Close'].iloc[-1]
         
-        # 財報數據 (若無數據，Yahoo 會回傳 None)
-        gm = (info.get('grossMargins') or 0) * 100
-        om = (info.get('operatingMargins') or 0) * 100
-        nm = (info.get('profitMargins') or 0) * 100
-        
-        # 技術指標計算
+        # 2. 技術指標 (改用 pandas 計算，不依賴 info)
         close = hist['Close']
         ma20 = close.rolling(20).mean().iloc[-1]
         std20 = close.rolling(20).std().iloc[-1]
@@ -43,34 +34,29 @@ def get_full_data(stock_id):
         rsi = (100 - (100 / (1 + rs))).iloc[-1]
         
         return {
-            "p": f"{price:.2f}", "eps": f"{eps:.2f}", "pe": f"{pe:.2f}",
-            "gm": f"{gm:.1f}%", "om": f"{om:.1f}%", "nm": f"{nm:.1f}%",
+            "p": f"{price:.2f}",
             "bb": f"{ma20-2*std20:.1f}~{ma20+2*std20:.1f}",
-            "macd": f"{macd:.2f}", "rsi": f"{rsi:.1f}"
+            "macd": f"{macd:.2f}",
+            "rsi": f"{rsi:.1f}"
         }
     except Exception as e:
-        return {"error": str(e)}
+        return None
 
 def main():
     stocks = {'2330': '台積電', '2454': '聯發科', '2395': '研華', '2327': '國巨'}
-    report = ["📊 完整財務技術分析報告"]
+    report = ["📊 台股技術面報告"]
     
     for sid, sname in stocks.items():
-        d = get_full_data(sid)
-        if "error" in d:
-            report.append(f"\n【{sname}】\n⚠️ 資料獲取異常")
-        else:
-            report.append(f"\n【{sname}】\n💰價:{d['p']} | EPS:{d['eps']} | PE:{d['pe']}\n"
-                          f"毛:{d['gm']} 營:{d['om']} 稅後:{d['nm']}\n"
-                          f"布林:{d['bb']}\nMACD:{d['macd']} | RSI:{d['rsi']}")
+        d = get_stable_data(sid)
+        if d:
+            report.append(f"\n【{sname}】\n💰價:{d['p']}\n布林:{d['bb']}\nMACD:{d['macd']} | RSI:{d['rsi']}")
     
     # 發送
     payload = {"to": USER_ID, "messages": [{"type": "text", "text": "\n".join(report)}]}
     headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {TOKEN}'}
     req = urllib.request.Request("https://api.line.me/v2/bot/message/push", 
                                  data=json.dumps(payload).encode('utf-8'), headers=headers)
-    with urllib.request.urlopen(req) as res:
-        print("✅ 執行結果:", res.status)
+    urllib.request.urlopen(req)
 
 if __name__ == "__main__":
     main()
