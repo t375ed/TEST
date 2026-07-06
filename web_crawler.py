@@ -14,41 +14,42 @@ def get_stock_data(stock_id):
     """
     try:
         ticker = yf.Ticker(f"{stock_id}.TW")
-        hist = ticker.history(period="120d")
+        # 獲取 120 天數據，ffill() 確保中間的斷層被補齊，解決 NaN 問題
+        hist = ticker.history(period="120d").ffill()
         info = ticker.info
         
-        # 1. 抓取基礎與財報數據
+        # 1. 抓取基礎數據 (若為空則給予 0 或 N/A)
         price = info.get('currentPrice', 'N/A')
         eps = info.get('trailingEps', 'N/A')
         pe = info.get('trailingPE', 'N/A')
         pb = info.get('priceToBook', 'N/A')
-        roe = info.get('returnOnEquity', 0)
-        g_m = info.get('grossMargins', 0)
-        o_m = info.get('operatingMargins', 0)
-        n_m = info.get('profitMargins', 0)
+        roe = info.get('returnOnEquity', 0) or 0
+        g_m = info.get('grossMargins', 0) or 0
+        o_m = info.get('operatingMargins', 0) or 0
+        n_m = info.get('profitMargins', 0) or 0
         
         # 2. 計算技術指標
         close = hist['Close']
+        
+        # 布林通道 (強制計算並處理為數字)
         ma20 = close.rolling(20).mean().iloc[-1]
         std20 = close.rolling(20).std().iloc[-1]
-        
-        # 布林通道三數值
-        b_mid = ma20
-        b_top = ma20 + (2 * std20)
-        b_bot = ma20 - (2 * std20)
+        b_mid = float(ma20)
+        b_top = float(ma20 + (2 * std20))
+        b_bot = float(ma20 - (2 * std20))
         
         # MACD
         ema12 = close.ewm(span=12, adjust=False).mean().iloc[-1]
         ema26 = close.ewm(span=26, adjust=False).mean().iloc[-1]
-        macd = ema12 - ema26
+        macd = float(ema12 - ema26)
         
-        # RSI
+        # RSI (使用 fillna(0) 確保不會出現 NaN)
         delta = close.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean().iloc[-1]
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean().iloc[-1]
-        rsi = 100 - (100 / (1 + (gain / loss)))
+        gain = delta.clip(lower=0).rolling(window=14).mean().iloc[-1]
+        loss = -delta.clip(upper=0).rolling(window=14).mean().iloc[-1]
+        rsi = float(100 - (100 / (1 + (gain / loss)))) if loss != 0 else 100
         
-        # 3. 三大區塊排版
+        # 3. 排版回傳 (確保數值顯示，過長則取整)
         return (f"💰現價:{price}\n"
                 f"【獲利】毛利:{g_m*100:.1f}%|營益:{o_m*100:.1f}%|稅後:{n_m*100:.1f}%\n"
                 f"【技術】布林底:{b_bot:.0f}|頂:{b_top:.0f}|均:{b_mid:.0f}|MACD:{macd:.2f}|RSI:{rsi:.1f}\n"
@@ -69,7 +70,7 @@ def main():
     
     report_text = "\n".join(report)
     
-    # 發送至 LINE (使用偽裝瀏覽器請求)
+    # 使用偽裝瀏覽器請求發送至 LINE
     payload = {"to": USER_ID, "messages": [{"type": "text", "text": report_text}]}
     headers = {
         'Content-Type': 'application/json',
@@ -88,4 +89,5 @@ def main():
         print(f"❌ 發送失敗: {e}")
 
 if __name__ == "__main__":
+    main()
     main()
