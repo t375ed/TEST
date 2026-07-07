@@ -2,7 +2,7 @@ name: Stock Bot # 這是這個自動化流程的名稱，會顯示在 GitHub Act
 
 on:
   schedule:
-    - cron: '0 7 * * *' # 自動排程：每天台灣時間早上 7 點（UTC 23:00）自動執行一次
+    - cron: '51 12 * * *' # 自動排程：每天台灣時間早上 7 點（UTC 23:00）自動執行一次
   workflow_dispatch:     # 啟用手動開關：讓你可以在 GitHub 頁面上按下「Run workflow」按鈕立即執行
 
 jobs:
