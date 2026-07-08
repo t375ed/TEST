@@ -1,4 +1,4 @@
-name: Catch DATA(手動)# 這是這個自動化流程的名稱，會顯示在 GitHub Actions 頁面上
+name: Catch DATA(手動) # 這是這個自動化流程的名稱，會顯示在 GitHub Actions 頁面上
 
 on:
   schedule:
