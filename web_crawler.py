@@ -9,15 +9,19 @@ TOKEN = os.environ.get("LINE_TOKEN")
 
 def get_stock_data(stock_id, is_etf=False):
     """
-    功能：抓取股價、財報與技術指標 (支援 ETF)
+    功能：抓取股價、財報與技術指標 (修正：強制從歷史資料取最新價)
     """
     try:
         ticker = yf.Ticker(f"{stock_id}.TW")
+        # 抓取近 120 天數據並補值
         hist = ticker.history(period="120d").ffill()
+        if hist.empty:
+            return "資料抓取異常: 查無股價資料"
+            
         info = ticker.info
         
-        # 提取股票資訊
-        price = info.get('currentPrice', 'N/A')
+        # 【修正】直接從 hist 取最新收盤價，比 info.get('currentPrice') 更穩定
+        price = hist['Close'].iloc[-1]
         
         # 計算技術指標
         close = hist['Close']
@@ -36,8 +40,8 @@ def get_stock_data(stock_id, is_etf=False):
         loss = -delta.clip(upper=0).rolling(window=14).mean().iloc[-1]
         rsi = float(100 - (100 / (1 + (gain / loss)))) if loss != 0 else 100
         
-        # 組裝報告 (判斷是否為 ETF)
-        report = f"💰現價:{price}\n【技術】布林底:{b_bot:.0f}|頂:{b_top:.0f}|均:{b_mid:.0f}|MACD:{macd:.2f}|RSI:{rsi:.1f}"
+        # 組裝報告
+        report = f"💰現價:{price:.2f}\n【技術】布林底:{b_bot:.0f}|頂:{b_top:.0f}|均:{b_mid:.0f}|MACD:{macd:.2f}|RSI:{rsi:.1f}"
         
         if not is_etf:
             eps = info.get('trailingEps', 'N/A')
